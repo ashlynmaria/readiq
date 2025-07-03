@@ -43,17 +43,6 @@ async def create_student(
     return new_student
 
 
-@router.get("/my-students", response_model=list[StudentOut])
-async def list_my_students(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    if current_user.role not in ["parent", "teacher", "admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized to view students")
-
-    result = await db.execute(select(User).where(User.parent_id == current_user.id))
-    return result.scalars().all()
-
 @router.put("/edit/{student_id}", response_model=StudentOut)
 async def edit_student(
     student_id: int,
@@ -105,16 +94,26 @@ async def get_student_progress(
     )
     progress = progress_result.scalars().all()
     return progress
-    
-@router.post("/deactivate/{student_id}")
+
+@router.patch("/{student_id}/deactivate")
 async def deactivate_student(
     student_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(User).where(User.id == student_id, User.parent_id == current_user.id)
-    )
+    if current_user.role in ["parent", "teacher"]:
+        # parent/teacher: only their own students
+        result = await db.execute(
+            select(User).where(User.id == student_id, User.parent_id == current_user.id)
+        )
+    elif current_user.role == "admin":
+        # admin can deactivate any student
+        result = await db.execute(
+            select(User).where(User.id == student_id, User.role == "student")
+        )
+    else:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
     student = result.scalar_one_or_none()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found or not yours.")
@@ -123,16 +122,25 @@ async def deactivate_student(
     await db.commit()
     return {"detail": f"Student {student.username} deactivated."}
 
-
-@router.post("/reactivate/{student_id}")
+@router.patch("/{student_id}/reactivate")
 async def reactivate_student(
     student_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(User).where(User.id == student_id, User.parent_id == current_user.id)
-    )
+    if current_user.role in ["parent", "teacher"]:
+        # parent/teacher: only their own students
+        result = await db.execute(
+            select(User).where(User.id == student_id, User.parent_id == current_user.id)
+        )
+    elif current_user.role == "admin":
+        # admin can reactivate any student
+        result = await db.execute(
+            select(User).where(User.id == student_id, User.role == "student")
+        )
+    else:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
     student = result.scalar_one_or_none()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found or not yours.")
@@ -140,3 +148,26 @@ async def reactivate_student(
     student.is_active = True
     await db.commit()
     return {"detail": f"Student {student.username} reactivated."}
+
+
+@router.get("/my-students", response_model=list[StudentOut])
+async def list_my_students(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if current_user.role not in ["parent", "teacher", "admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized to view students")
+
+    result = await db.execute(select(User).where(User.parent_id == current_user.id))
+    return result.scalars().all()
+
+@router.get("/", response_model=list[StudentOut])
+async def list_all_students(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admins only")
+
+    result = await db.execute(select(User).where(User.role == "student"))
+    return result.scalars().all()
