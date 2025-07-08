@@ -43,29 +43,6 @@ async def create_student(
     return new_student
 
 
-@router.put("/edit/{student_id}", response_model=StudentOut)
-async def edit_student(
-    student_id: int,
-    data: StudentUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    # make sure this student belongs to this parent/teacher
-    result = await db.execute(
-        select(User).where(User.id == student_id, User.parent_id == current_user.id)
-    )
-    student = result.scalar_one_or_none()
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found or not yours.")
-
-    # update fields
-    student.username = data.username
-    student.email = data.email
-
-    await db.commit()
-    await db.refresh(student)
-    return student
-
 @router.get("/{student_id}/progress", response_model=list[ProgressOut])
 async def get_student_progress(
     student_id: int,
@@ -171,3 +148,32 @@ async def list_all_students(
 
     result = await db.execute(select(User).where(User.role == "student"))
     return result.scalars().all()
+
+@router.put("/edit/{student_id}", response_model=StudentOut)
+async def edit_student(
+    student_id: int,
+    data: StudentUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if current_user.role in ["parent", "teacher"]:
+        result = await db.execute(
+            select(User).where(User.id == student_id, User.parent_id == current_user.id)
+        )
+    elif current_user.role == "admin":
+        result = await db.execute(
+            select(User).where(User.id == student_id, User.role == "student")
+        )
+    else:
+        raise HTTPException(status_code=403, detail="Not authorized to edit students")
+
+    student = result.scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found or not yours.")
+
+    student.username = data.username
+    student.email = data.email
+
+    await db.commit()
+    await db.refresh(student)
+    return student
