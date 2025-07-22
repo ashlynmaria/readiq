@@ -8,6 +8,7 @@ from schemas.user import UserOut, UserUpdate, UserUpdatePassword
 from core.security import hash_password
 from fastapi import status
 from schemas.user import UserUpdateRole
+from typing import List
 
 router = APIRouter()
 
@@ -51,8 +52,7 @@ async def delete_account(
     return {"detail": "Account deleted successfully"}
 
 
-
-@router.get("/users", response_model=list[UserOut])
+@router.get("/users", response_model=List[UserOut])
 async def list_all_users(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -61,6 +61,7 @@ async def list_all_users(
         raise HTTPException(status_code=403, detail="Not authorized")
     result = await db.execute(select(User))
     users = result.scalars().all()
+    return users
     return users
 
 @router.get("/all-users", response_model=list[UserOut])

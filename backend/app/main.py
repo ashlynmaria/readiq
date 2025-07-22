@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
 
-from routes import auth, protected, progress, students, courses, enrollment
+from routes import auth, protected, progress, students, courses, enrollment, reading
 
 app = FastAPI(title="ReadIQ API")
 
@@ -26,6 +26,7 @@ app.include_router(progress.router)
 app.include_router(students.router)
 app.include_router(courses.router)
 app.include_router(enrollment.router)
+app.include_router(reading.router)
 
 @app.get("/")
 async def root():
